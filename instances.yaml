@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EC2 instances and bastion host for VPC peering setup
+
+Resources:
+  VPCAInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a5c3558529277641
+      InstanceType: t2.micro
+      SubnetId: !ImportValue VPCASubnetId
+      SecurityGroupIds:
+        - !ImportValue VPCAInstanceSecurityGroupId
+      KeyName: vockey
+      Tags:
+        - Key: Name
+          Value: VPC-A-Instance
+
+  VPCBInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a5c3558529277641
+      InstanceType: t2.micro
+      SubnetId: !ImportValue VPCBSubnetId
+      SecurityGroupIds:
+        - !ImportValue VPCBInstanceSecurityGroupId
+      KeyName: vockey
+      Tags:
+        - Key: Name
+          Value: VPC-B-Instance
+
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a5c3558529277641
+      InstanceType: t2.micro
+      SubnetId: !ImportValue VPCAPublicSubnetId
+      SecurityGroupIds:
+        - !ImportValue BastionSecurityGroupId
+      KeyName: vockey
+      Tags:
+        - Key: Name
+          Value: Bastion-Host
+
+Outputs:
+  VPCAInstanceId:
+    Description: ID of EC2 instance in VPC A
+    Value: !Ref VPCAInstance
+  VPCBInstanceId:
+    Description: ID of EC2 instance in VPC B
+    Value: !Ref VPCBInstance
+  BastionInstanceId:
+    Description: ID of Bastion Host instance
+    Value: !Ref BastionInstance
+  BastionPublicIp:
+    Description: Public IP of Bastion Host
+    Value: !GetAtt BastionInstance.PublicIp
