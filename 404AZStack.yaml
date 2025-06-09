@@ -1,7 +1,9 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Test Stack
+Description: Two VPCs with EC2 web servers and VPC peering
 
 Resources:
+
+  # VPC 1
   VPC1:
     Type: AWS::EC2::VPC
     Properties:
@@ -11,47 +13,64 @@ Resources:
       Tags:
         - Key: Name
           Value: VPC1
-  # Subnet for Web Server (Public subnet in VPC1)
-  PublicSubnetVPC1:
+
+  InternetGateway1:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway1:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC1
+      InternetGatewayId: !Ref InternetGateway1
+
+  PublicSubnet1A:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC1
       CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
       MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select
-        - 0
-        - !GetAZs ''
       Tags:
         - Key: Name
-          Value: Public-Subnet-VPC1
-  # Internet Gateway for VPC1 (for web server)
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-  AttachGateway:
-    Type: AWS::EC2::VPCGatewayAttachment
+          Value: PublicSubnet1A
+
+  PublicSubnet1B:
+    Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC1
-      InternetGatewayId: !Ref InternetGateway
-  # Route Table for Public Subnet in VPC1
-  PublicRouteTableVPC1:
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet1B
+
+  PublicRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC1
-  PublicRoute:
+
+  PublicRoute1:
     Type: AWS::EC2::Route
-    DependsOn: AttachGateway
+    DependsOn: AttachGateway1
     Properties:
-      RouteTableId: !Ref PublicRouteTableVPC1
+      RouteTableId: !Ref PublicRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-  # Associate Public Route Table with Public Subnet
-  PublicRouteTableAssociation:
+      GatewayId: !Ref InternetGateway1
+
+  SubnetRouteAssoc1A:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnetVPC1
-      RouteTableId: !Ref PublicRouteTableVPC1
-  # Security Group for Web Server in VPC1
-  WebServerSecurityGroup:
+      SubnetId: !Ref PublicSubnet1A
+      RouteTableId: !Ref PublicRouteTable1
+
+  SubnetRouteAssoc1B:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1B
+      RouteTableId: !Ref PublicRouteTable1
+
+  WebSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow HTTP and SSH
@@ -65,24 +84,120 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
-  # EC2 Instance for Web Server in VPC1
-  WebServerInstance:
+
+  WebServer1:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t3.small
       ImageId: ami-0a5c3558529277641
-      SubnetId: !Ref PublicSubnetVPC1
-      SecurityGroupIds:
-        - !Ref WebServerSecurityGroup
+      SubnetId: !Ref PublicSubnet1A
       KeyName: vockey
+      SecurityGroupIds: [ !Ref WebSG ]
       UserData: !Base64 |
         #!/bin/bash
         yum update -y
-        yum install -y httpd php php-mysql
+        yum install -y httpd
         systemctl start httpd
         systemctl enable httpd
-        echo "<?php phpinfo(); ?>" > /var/www/html/index.php
+        echo "Web Server 1 in VPC 1" > /var/www/html/index.html
+
+  WebServer2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.small
+      ImageId: ami-0a5c3558529277641
+      SubnetId: !Ref PublicSubnet1B
+      KeyName: vockey
+      SecurityGroupIds: [ !Ref WebSG ]
+      UserData: !Base64 |
+        #!/bin/bash
+        yum update -y
+        yum install -y httpd
+        systemctl start httpd
+        systemctl enable httpd
+        echo "Web Server 2 in VPC 1" > /var/www/html/index.html
+
+  # VPC 2
+  VPC2:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VPC2
+
+  InternetGateway2:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway2:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC2
+      InternetGatewayId: !Ref InternetGateway2
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC2
+      CidrBlock: 10.1.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet2
+
+  PublicRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC2
+
+  PublicRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway2
+    Properties:
+      RouteTableId: !Ref PublicRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway2
+
+  SubnetRouteAssoc2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable2
+
+  # VPC Peering
+  VPCPeeringConnection:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !Ref VPC1
+      PeerVpcId: !Ref VPC2
+      Tags:
+        - Key: Name
+          Value: VPC1-VPC2-Peer
+
+  # VPC 1 Route to VPC 2
+  VPC1ToVPC2Route:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable1
+      DestinationCidrBlock: 10.1.0.0/16
+      VpcPeeringConnectionId: !Ref VPCPeeringConnection
+
+  # VPC 2 Route to VPC 1
+  VPC2ToVPC1Route:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable2
+      DestinationCidrBlock: 10.0.0.0/16
+      VpcPeeringConnectionId: !Ref VPCPeeringConnection
+
 Outputs:
-  WebServerPublicIP:
-    Description: Public IP address of the web server instance
-    Value: !GetAtt WebServerInstance.PublicIp
+  WebServer1PublicIP:
+    Description: Public IP of Web Server 1
+    Value: !GetAtt WebServer1.PublicIp
+
+  WebServer2PublicIP:
+    Description: Public IP of Web Server 2
+    Value: !GetAtt WebServer2.PublicIp
